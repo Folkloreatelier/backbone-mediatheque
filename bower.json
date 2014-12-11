@@ -1,0 +1,20 @@
+{
+  "name": "backbone-scene",
+  "version": "0.0.1",
+  "authors": [
+    "Folklore <info@atelierfolklore.ca>"
+  ],
+  "description": "Backbone views to manager stage and scene concept",
+  "main": "src/scene.js",
+  "moduleType": [
+    "amd"
+  ],
+  "keywords": [
+    "backbone"
+  ],
+  "license": "MIT",
+  "homepage": "http://github.com/Folkloreatelier/backbone-scene",
+  "dependencies": {
+    "backbone": ">=1.1.2"
+  }
+}
