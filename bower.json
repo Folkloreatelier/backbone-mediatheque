@@ -1,11 +1,10 @@
 {
-  "name": "backbone-scene",
-  "version": "0.0.3",
+  "name": "backbone-mediatheque",
+  "version": "0.0.4",
   "authors": [
     "Folklore <info@atelierfolklore.ca>"
   ],
-  "description": "Backbone views to manager stage and scene concept",
-  "main": "src/scene.js",
+  "description": "Backbone views to help with interactive projects using scenes and media content",
   "moduleType": [
     "amd"
   ],
@@ -13,9 +12,10 @@
     "backbone"
   ],
   "license": "MIT",
-  "homepage": "http://github.com/Folkloreatelier/backbone-scene",
+  "homepage": "http://github.com/Folkloreatelier/backbone-mediatheque",
   "dependencies": {
     "underscore": "~1.6.0",
-    "backbone": "~1.1.2"
+    "backbone": "~1.1.2",
+    "mediaelement": "~2.16.2"
   }
 }
