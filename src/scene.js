@@ -1,9 +1,13 @@
 define(['backbone'], function(Backbone) {
     
+    // Underscore and jQuery pulled from Backbone own versions
     var $ = Backbone.$;
+    var _ = Backbone._;
     
+    // Built-in methods that cannot be removed
     var builtInMethods = ['init', 'build', 'destroy', 'resize'];
     
+    // The scene view extends backbone view
     var SceneView = Backbone.View.extend({
 		
         methods: ['play', 'pause', 'stop', 'end'],
@@ -19,6 +23,8 @@ define(['backbone'], function(Backbone) {
             $(window).on('resize',this.resize);
 		},
 		
+        // Prepare the methods by proxying existing methods and triggering
+        // an event before and after the method
 		prepareMethods: function()
 		{
             var methods = _.union(builtInMethods, this.options.methods);
@@ -44,11 +50,13 @@ define(['backbone'], function(Backbone) {
 			},this));
 		},
 		
+        // Automatically call the build method on render
 		render: function()
 		{
 			this.build();
 		},
 		
+        // Automatically call the destroy method on remove
 		remove: function()
 		{
 			this.destroy();
