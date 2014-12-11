@@ -1,8 +1,7 @@
-define(['backbone'], function(Backbone) {
+define(['underscore', 'backbone'], function(_, Backbone) {
     
     // Underscore and jQuery pulled from Backbone own versions
     var $ = Backbone.$;
-    var _ = Backbone._;
     
     // Built-in methods that cannot be removed
     var builtInMethods = ['init', 'build', 'destroy', 'resize'];

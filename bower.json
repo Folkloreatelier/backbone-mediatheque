@@ -1,6 +1,6 @@
 {
   "name": "backbone-scene",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "authors": [
     "Folklore <info@atelierfolklore.ca>"
   ],
@@ -15,6 +15,7 @@
   "license": "MIT",
   "homepage": "http://github.com/Folkloreatelier/backbone-scene",
   "dependencies": {
-    "backbone": ">=1.1.2"
+    "underscore": "~1.6.0",
+    "backbone": "~1.1.2"
   }
 }
