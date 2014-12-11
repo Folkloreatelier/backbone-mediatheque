@@ -1,6 +1,6 @@
 {
   "name": "backbone-mediatheque",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "authors": [
     "Folklore <info@atelierfolklore.ca>"
   ],
@@ -14,7 +14,7 @@
   "license": "MIT",
   "homepage": "http://github.com/Folkloreatelier/backbone-mediatheque",
   "dependencies": {
-    "underscore": "~1.6.0",
+    "underscore": "~1.7.0",
     "backbone": "~1.1.2",
     "mediaelement": "~2.16.2"
   }
