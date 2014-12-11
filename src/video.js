@@ -6,21 +6,24 @@ define([
 
 ], function(
 
-    $, _, Backbone,
+    _, Backbone,
 
     MediaElement
 
 ) {
 
     'use strict';
+        
+    // jQuery pulled from Backbone own version
+    var $ = Backbone.$;
 
     var VideoView = Backbone.View.extend({
 
-        className: 'video',
+        className: 'mediatheque-video',
 
         options: {
             debug: false,
-            pluginPath: '/js/components/mediaelement/build/',
+            pluginPath: '/bower_components/mediaelement/build/',
             source: null,
             timeUpdateInterval: 30,
             width: 320,
@@ -41,6 +44,7 @@ define([
 
         },
 
+        $playerContainer: null,
         player: null,
 
         ready: false,
@@ -102,11 +106,10 @@ define([
         },
 
         render: function() {
-
-            this.$el.html(this.template(_.extend({},this.options,{
-                width: this.$el.width(),
-                height: this.$el.height()
-            })));
+            
+            this.$playerContainer = $('<div class="mediatheque-video-player"></div>');
+            this.$playerContainer.html(this.getVideoHTML());
+            this.$el.append(this.$playerContainer);
 
             this.resize();
 
@@ -138,6 +141,17 @@ define([
                 },this)
             });
 
+        },
+        
+        getVideoHTML: function()
+        {
+            var html = [];
+            html.push('<video width="100%" height="100%" style="width: 100%; height:100%;" preload="auto" autoplay muted>');
+            _.each(this.options.source, function(path,type) {
+                html.push('<source src="' + path + '" type="' + type + '">');
+            });
+            html.push('</video>');
+            return html.join('');
         },
         
         bindPlayerEvents: function() {
