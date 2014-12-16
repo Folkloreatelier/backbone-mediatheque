@@ -26,7 +26,7 @@ define(['underscore', 'backbone'], function(_, Backbone) {
         // an event before and after the method
 		prepareMethods: function()
 		{
-            var methods = _.union(builtInMethods, this.options.methods);
+            var methods = _.union(builtInMethods, this.methods);
             var noop = function(){};
             
 			_.each(methods, _.bind(function(methodName)
