@@ -59,6 +59,7 @@ define([
 
         currentTime: 0,
         duration: 0,
+        currentTimeToPreload: 0,
 
         _timeUpdateInterval: null,
 
@@ -66,6 +67,7 @@ define([
         height: 0,
         x: 0,
         y: 0,
+        
 
         initialize: function(options) {
 
@@ -128,10 +130,9 @@ define([
                     
                     this.player = mediaElement;
                     
-                    mediaElement.addEventListener('canplay', this._handlePlayerPreCanplay, false);
-                    mediaElement.addEventListener('canplaythrough', this._handlePlayerPreCanplayThrough, false);
-                    mediaElement.addEventListener('progress', this._handlePlayerPreProgress, false);
-                    mediaElement.addEventListener('timeupdate', this._handlePlayerPreTimeupdate, false);
+                    this.currentTimeToPreload = this.options.start || 0;
+                    
+                    this.preload();
                      
                     window.setTimeout(this._handlePlayerReady,1);
                      
@@ -167,6 +168,24 @@ define([
             this.player.addEventListener('ended',this._handlePlayerEnded, false);
             this.player.addEventListener('error', this._handlePlayerError, false);
             this.player.addEventListener('timeupdate', this._handlePlayerTimeupdate, false);
+            
+        },
+        
+        bindPreloadPlayerEvents: function() {
+            
+            this.player.addEventListener('canplay', this._handlePlayerPreCanplay, false);
+            this.player.addEventListener('progress', this._handlePlayerPreProgress, false);
+            this.player.addEventListener('timeupdate', this._handlePlayerPreTimeupdate, false);
+            
+            try {
+                this.player.removeEventListener('loadeddata',this._handlePlayerLoaded);
+                this.player.removeEventListener('canplay',this._handlePlayerCanPlay);
+                this.player.removeEventListener('play',this._handlePlayerPlay);
+                this.player.removeEventListener('pause',this._handlePlayerPause);
+                this.player.removeEventListener('ended',this._handlePlayerEnded);
+                this.player.removeEventListener('error', this._handlePlayerError);
+                this.player.removeEventListener('timeupdate', this._handlePlayerTimeupdate);
+            } catch(e) {}
             
         },
         
@@ -296,7 +315,7 @@ define([
         _play: function() {
             
             if(!this.paused) {
-                this.resetPlayerCurrentTime();
+                this.rewind();
             }
             
             this.log('play', this.player.currentTime);
@@ -331,19 +350,27 @@ define([
                 
             this.player.pause();
             
-            this.resetPlayerCurrentTime();
+            this.rewind();
         },
         
-        resetPlayerCurrentTime: function() {
+        rewind: function()
+        {
             try {
                 if(this.options.start) {
                     this.player.setCurrentTime(this.options.start);
                 } else {
                     this.player.setCurrentTime(0);
                 }
-                this.log('player.resetCurrentTime',this.player.currentTime);
+                this.log('player.rewind',this.player.currentTime);
+            } catch(e){}    
+        },
+        
+        resetPlayerCurrentTime: function()
+        {
+            try {
+                this.player.setCurrentTime(this.currentTimeToPreload);
+                this.log('player.resetPlayerCurrentTime',this.player.currentTime);
             } catch(e){}
-            
         },
 
         getCurrentTime: function() {
@@ -355,6 +382,23 @@ define([
 
         setCurrentTime: function(time) {
             this.player.setCurrentTime(time);
+        },
+        
+        setCurrentTimeAndPreload: function(time)
+        {
+            this.currentTimeToPreload = time;
+            this.player.setCurrentTime(time);
+            this.preload();
+            this.player.setCurrentTime(time);
+        },
+        
+        preload: function()
+        {
+            this.firstPlay = false;
+            this.reallyLoaded = false;
+            this.canPlayThrough = false;
+            
+            this.bindPreloadPlayerEvents();
         },
 
         setVolume: function(volume) {
