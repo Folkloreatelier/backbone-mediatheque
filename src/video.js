@@ -52,10 +52,12 @@ define([
         reallyLoaded: false,
         playing: false,
         paused: false,
-        canPlayThrough: false,
         firstPlay: false,
         
-        canplayThroughTimeout: null,
+        preCanPlay: false,
+        preCanPlayTimeout: null,
+        preCanPlayThrough: false,
+        preCanplayThroughTimeout: null,
 
         currentTime: 0,
         duration: 0,
@@ -132,9 +134,10 @@ define([
                     
                     this.currentTimeToPreload = this.options.start || 0;
                     
-                    this.preload();
-                     
-                    window.setTimeout(this._handlePlayerReady,1);
+                    window.setTimeout(_.bind(function() {
+                        this.preload();
+                        this._handlePlayerReady();
+                    },this),10);
                      
                 },this),
                 error: _.bind(function () { 
@@ -386,8 +389,13 @@ define([
         
         setCurrentTimeAndPreload: function(time)
         {
+            if(time === this.currentTimeToPreload)
+            {
+                this.log('Skip preloading');
+                return;
+            }
+            
             this.currentTimeToPreload = time;
-            this.player.setCurrentTime(time);
             this.preload();
             this.player.setCurrentTime(time);
         },
@@ -396,7 +404,8 @@ define([
         {
             this.firstPlay = false;
             this.reallyLoaded = false;
-            this.canPlayThrough = false;
+            this.preCanPlay = false;
+            this.preCanPlayThrough = false;
             
             this.bindPreloadPlayerEvents();
         },
@@ -464,23 +473,21 @@ define([
 
         },
         
-        _handlePlayerPreCanplay: function() {
+        _handlePlayerPreCanplay: function()
+        {
             this.log('pre.canplay');
+            this.preCanPlay = true;
             if(!this.firstPlay) {
+                this.log('pre.canplay','first play');
                 this.player.play();
-            } else if(this.player.pluginType === 'native') {
-                this._handlePlayerPreCanReallyPlay();
+                this.resetPlayerCurrentTime();
             }
         },
         
         _handlePlayerPreCanplayThrough: function() {
             
-            this.canPlayThrough = true;
+            this.preCanPlayThrough = true;
             this.log('pre.canplaythrough');
-            
-            if(this.firstPlay && this.player && this.player.pluginType === 'native') {
-                this._handlePlayerPreCanReallyPlay();
-            }
             
         },
         
@@ -500,31 +507,37 @@ define([
             var progress = duration && end ? (end/duration):0;
             this.log('pre.progress',progress);
             if(progress > 0 && !this.firstPlay) {
+                this.log('pre.progress','first play');
                 this.player.play();
+                this.resetPlayerCurrentTime();
             }
         },
         
         _handlePlayerPreTimeupdate: function(e) {
+            
             var currentTime = this.player.currentTime || 0;
-            this.log('pre.timeupdate',currentTime);
-            var minLoadTime = this.player.duration < 0.5 ? this.player.duration:0.5;
-            if(!this.firstPlay && currentTime > minLoadTime) {
-                this.log('first timeupdate');
-                this.firstPlay = true;
-                this.resetPlayerCurrentTime();
-                this.player.pause();
-                if(this.player.pluginType === 'flash') {
-                    this._handlePlayerReallyLoaded();
-                } else if(this.canPlayThrough) {
-                    this.canplayThroughTimeout = setTimeout(_.bind(function(){
-                        
-                        this.log('canplayThroughTimeout expired');
-                        
-                        this._handlePlayerReallyLoaded();
-                        this.canplayThroughTimeout = null;
-                        
-                    },this), this.options.readyTimeout);
+            
+            this.log('pre.timeupdate',currentTime, this.firstPlay, this.preCanPlay);
+            
+            if(!this.firstPlay)
+            {
+                if(currentTime >= this.currentTimeToPreload)
+                {
+                    this.log('pre.timeupdate', 'first');
+                    this.firstPlay = true;
+                    this.player.pause();
                 }
+                else
+                {
+                    this.log('pre.timeupdate', 'seek');
+                    this.resetPlayerCurrentTime();
+                }
+            }
+            
+            if(this.firstPlay && currentTime >= this.currentTimeToPreload)
+            {
+                this.log('pre.timeupdate', 'ready');
+                this._handlePlayerReallyLoaded();
             }
         },
         
@@ -623,7 +636,6 @@ define([
 
             try {
                 this.currentTime = this.player.currentTime;
-                //this.log('player.timeupdate',this.currentTime);
             }catch(e){}
 
             this.trigger('player:timeupdate',this.currentTime);
@@ -640,7 +652,12 @@ define([
         {
             if(this.options.debug)
             {
-                console.log.apply(console, arguments);
+                var args = ['[video]'];
+                for(var i = 0, al = arguments.length; i < al; i++)
+                {
+                    args.push(arguments[i]);
+                }
+                console.log.apply(console, args);
             }
         }
 
