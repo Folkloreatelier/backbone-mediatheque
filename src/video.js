@@ -662,6 +662,37 @@ define([
         }
 
     });
+    
+    VideoView.canPlay = function(type) {
+        var elem = document.createElement('video'),
+            bool = false;
+
+        // IE9 Running on Windows Server SKU can cause an exception to be thrown, bug #224
+        try {
+            bool = !!elem.canPlayType;
+            if(bool && typeof(type) !== 'undefined')
+            {
+                if(type === 'webm')
+                {
+                    bool = elem.canPlayType('video/webm; codecs="vp8, vorbis"').replace(/^no$/,'').length ? true:false;
+                }
+                else if(type === 'ogg')
+                {
+                    bool = elem.canPlayType('video/ogg; codecs="theora"').replace(/^no$/,'').length ? true:false;
+                }
+                else if(type === 'h264')
+                {
+                    bool = elem.canPlayType('video/mp4; codecs="avc1.42E01E"').replace(/^no$/,'').length ? true:false;
+                }
+                else
+                {
+                    bool = false;
+                }
+            }
+        } catch(e) { }
+
+        return bool;
+    };
 
     return VideoView;
 
