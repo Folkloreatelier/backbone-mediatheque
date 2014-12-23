@@ -389,15 +389,18 @@ define([
         
         setCurrentTimeAndPreload: function(time)
         {
-            if(time === this.currentTimeToPreload)
+            if(Math.round(time) === Math.round(this.getCurrentTime()))
             {
                 this.log('Skip preloading');
                 return;
             }
             
             this.currentTimeToPreload = time;
+            this.player.setVolume(0);
+            this.player.setMuted(true);
             this.preload();
             this.player.setCurrentTime(time);
+            this.player.play();
         },
         
         preload: function()
@@ -477,8 +480,9 @@ define([
         {
             this.log('pre.canplay');
             this.preCanPlay = true;
-            if(!this.firstPlay) {
-                this.log('pre.canplay','first play');
+            var currentTime = this.player && this.player.currentTime ? this.player.currentTime:0;
+            if(!this.firstPlay && currentTime < this.currentTimeToPreload) {
+                this.log('pre.canplay','force play', currentTime);
                 this.player.play();
                 this.resetPlayerCurrentTime();
             }
@@ -503,11 +507,12 @@ define([
         _handlePlayerPreProgress: function(e) {
             var player = e.target;
             var duration = player && player.duration ? player.duration:0;
+            var currentTime = player && player.currentTime ? player.currentTime:0;
             var end = player && player.buffered && player.buffered.length ? player.buffered.end(0):0;
             var progress = duration && end ? (end/duration):0;
             this.log('pre.progress',progress);
-            if(progress > 0 && !this.firstPlay) {
-                this.log('pre.progress','first play');
+            if(progress > 0 && !this.firstPlay && currentTime < this.currentTimeToPreload) {
+                this.log('pre.progress','force play', currentTime);
                 this.player.play();
                 this.resetPlayerCurrentTime();
             }
@@ -521,20 +526,21 @@ define([
             
             if(!this.firstPlay)
             {
-                if(currentTime >= this.currentTimeToPreload)
+                var delta = Math.abs(currentTime - this.currentTimeToPreload);
+                if(currentTime > this.currentTimeToPreload)
                 {
                     this.log('pre.timeupdate', 'first');
                     this.firstPlay = true;
                     this.player.pause();
                 }
-                else
+                else if(delta > 1)
                 {
-                    this.log('pre.timeupdate', 'seek');
+                    this.log('pre.timeupdate', 'seek', currentTime);
                     this.resetPlayerCurrentTime();
                 }
             }
             
-            if(this.firstPlay && currentTime >= this.currentTimeToPreload)
+            if(this.firstPlay && currentTime > this.currentTimeToPreload)
             {
                 this.log('pre.timeupdate', 'ready');
                 this._handlePlayerReallyLoaded();
