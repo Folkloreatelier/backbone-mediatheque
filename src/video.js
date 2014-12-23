@@ -204,6 +204,16 @@ define([
             var videoWidth = this.options.width;
             var videoHeight = this.options.height;
             var videoRatio = videoWidth/videoHeight;
+            
+            if(typeof(newWidth) === 'undefined')
+            {
+                newWidth = this.$el.width();
+            }
+            
+            if(typeof(newHeight) === 'undefined')
+            {
+                newHeight = this.$el.height();
+            }
 
             var viewWidth = newWidth;
             var viewHeight = newHeight;
@@ -251,8 +261,8 @@ define([
             this.x = Math.round(left);
             this.y = Math.round(top);
 
-            if(this.$('.video-player').length) {
-                this.$('.video-player').css({
+            if(this.$('.mediatheque-video-player').length) {
+                this.$('.mediatheque-video-player').css({
                     'width' : this.width + 'px',
                     'height' : this.height + 'px',
                     'top' : this.y + 'px',
