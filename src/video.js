@@ -453,6 +453,12 @@ define([
             return 0;
             
         },
+        
+        needsForcePlay: function()
+        {
+            var currentTime = this.player && this.player.currentTime ? this.player.currentTime:0;
+            return currentTime < this.currentTimeToPreload || (currentTime === 0 && this.currentTimeToPreload > 0);
+        },
 
         _startTimeUpdateInterval: function() {
 
@@ -491,7 +497,7 @@ define([
             this.log('pre.canplay');
             this.preCanPlay = true;
             var currentTime = this.player && this.player.currentTime ? this.player.currentTime:0;
-            if(!this.firstPlay && (currentTime < this.currentTimeToPreload || currentTime === 0)) {
+            if(!this.firstPlay && this.needsForcePlay()) {
                 this.log('pre.canplay','force play', currentTime);
                 this.player.play();
                 this.resetPlayerCurrentTime();
@@ -521,7 +527,7 @@ define([
             var end = player && player.buffered && player.buffered.length ? player.buffered.end(0):0;
             var progress = duration && end ? (end/duration):0;
             this.log('pre.progress',progress);
-            if(progress > 0 && !this.firstPlay && (currentTime < this.currentTimeToPreload || currentTime === 0)) {
+            if(progress > 0 && !this.firstPlay && this.needsForcePlay()) {
                 this.log('pre.progress','force play', currentTime);
                 this.player.play();
                 this.resetPlayerCurrentTime();
