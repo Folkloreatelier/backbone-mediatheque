@@ -22,21 +22,24 @@ define([
         className: 'mediatheque-video',
 
         options: {
-            debug: false,
-            pluginPath: '/bower_components/mediaelement/build/',
             source: null,
-            timeUpdateInterval: 30,
             width: 320,
             height: 240,
-            loop: false,
-            muted: false,
-            autoplay: false,
             duration: null,
             start: 0,
             end: 0,
             volume: 1,
-            readyTimeout: 1000,
+            loop: false,
+            muted: false,
+            autoplay: false,
+            preload: false,
+            
+            debug: false,
+            pluginPath: '/bower_components/mediaelement/build/',
+            timeUpdateInterval: 30,
+            
             keepVisible: false,
+            centerX: 'center',
             centerY: 'middle'
         },
 
@@ -46,24 +49,26 @@ define([
 
         $playerContainer: null,
         player: null,
+        video: null,
 
         ready: false,
+        preloaded: false,
         loaded: false,
-        reallyLoaded: false,
+        
         playing: false,
         paused: false,
-        firstPlay: false,
         
-        preCanPlay: false,
-        preCanPlayTimeout: null,
-        preCanPlayThrough: false,
-        preCanplayThroughTimeout: null,
+        preloadTime: 0,
+        preloadFirstPlay: false,
+        preloadCanPlay: false,
+        preloadCanPlayThrough: false,
 
         currentTime: 0,
-        duration: 0,
-        currentTimeToPreload: 0,
-
         _timeUpdateInterval: null,
+        
+        duration: 0,
+        videoWidth: 0,
+        videoHeight: 0,
 
         width: 0,
         height: 0,
@@ -73,7 +78,7 @@ define([
 
         initialize: function(options) {
 
-            this.options = _.extend({},this.options,options);
+            this.options = _.extend({},this.options, options);
 
             //Build sources
             var source = {};
@@ -86,13 +91,6 @@ define([
             }
             this.options.source = source;
             
-            //Get filename
-            this.filename = '';
-            for(var key in this.options.source) {
-                this.filename = this.options.source[key].match(/\/([^\/]+)$/)[1];
-                break;
-            }
-            
             _.bindAll(this,
                 '_handlePlayerPreProgress',
                 '_handlePlayerPreCanplay',
@@ -100,12 +98,14 @@ define([
                 '_handlePlayerPreTimeupdate',
                 '_handlePlayerReady',
                 '_handlePlayerLoaded',
+                '_handlePlayerLoadedMetadata',
                 '_handlePlayerCanPlay',
                 '_handlePlayerPlay',
                 '_handlePlayerPause',
                 '_handlePlayerEnded',
                 '_handlePlayerError',
-                '_handlePlayerTimeupdate');
+                '_handlePlayerTimeupdate',
+                '_handleTimeUpdateInterval');
 
         },
 
@@ -117,10 +117,10 @@ define([
 
             this.resize();
 
-            var video = this.$el.find('video')[0];
+            this.video = this.$el.find('video')[0];
             
-            this.player = new MediaElement(video, {
-                enablePluginDebug: false,
+            this.player = new MediaElement(this.video, {
+                enablePluginDebug: this.options.debug,
                 plugins: ['flash','silverlight'],
                 pluginPath: this.options.pluginPath,
                 startVolume: 0,
@@ -128,19 +128,32 @@ define([
                 defaultVideoHeight: this.options.height,
                 pluginWidth: this.width,
                 pluginHeight: this.height,
-                success: _.bind(function (mediaElement, domObject) {
-                    
+                success: _.bind(function (mediaElement, domObject)
+                {
                     this.player = mediaElement;
                     
-                    this.currentTimeToPreload = this.options.start || 0;
-                    
-                    window.setTimeout(_.bind(function() {
-                        this.preload();
+                    //Player ready
+                    window.setTimeout(_.bind(function()
+                    {
                         this._handlePlayerReady();
-                    },this),10);
-                     
+                    },this),1);
+                    
+                    //Preload
+                    if(this.options.preload)
+                    {
+                        window.setTimeout(_.bind(function()
+                        {
+                            this.preloadTime = this.options.start || 0;
+                            this.preload();
+                        },this),10);
+                    }
+                    else
+                    {
+                        this.bindPlayerEvents();
+                    }
                 },this),
-                error: _.bind(function () { 
+                error: _.bind(function ()
+                { 
                     this.log('mediaElement error',arguments[0]);
                 },this)
             });
@@ -149,8 +162,28 @@ define([
         
         getVideoHTML: function()
         {
+            var attributes = [];
+            if(this.options.preload)
+            {
+                attributes.push('preload="auto"');
+                attributes.push('autoplay');
+                attributes.push('muted');
+            }
+            else
+            {
+                attributes.push('preload="metadata"');
+                if(this.options.autoplay)
+                {
+                    attributes.push('autoplay');
+                }
+                if(this.options.muted)
+                {
+                    attributes.push('muted');
+                }
+            }
+            
             var html = [];
-            html.push('<video width="100%" height="100%" style="width: 100%; height:100%;" preload="auto" autoplay muted>');
+            html.push('<video width="100%" height="100%" style="width: 100%; height:100%;" '+attributes.join(' ')+'>');
             _.each(this.options.source, function(path,type) {
                 html.push('<source src="' + path + '" type="' + type + '">');
             });
@@ -158,103 +191,114 @@ define([
             return html.join('');
         },
         
-        bindPlayerEvents: function() {
-            
-            this.player.removeEventListener('canplay', this._handlePlayerPreCanplay);
-            this.player.removeEventListener('progress', this._handlePlayerPreProgress);
-            this.player.removeEventListener('timeupdate', this._handlePlayerPreTimeupdate);
+        bindPlayerEvents: function()
+        {
+            this.unbindPreloadPlayerEvents();
             
             this.player.addEventListener('loadeddata',this._handlePlayerLoaded, false);
+            this.player.addEventListener('loadedmetadata',this._handlePlayerLoadedMetadata, false);
             this.player.addEventListener('canplay',this._handlePlayerCanPlay, false);
             this.player.addEventListener('play',this._handlePlayerPlay, false);
             this.player.addEventListener('pause',this._handlePlayerPause, false);
             this.player.addEventListener('ended',this._handlePlayerEnded, false);
             this.player.addEventListener('error', this._handlePlayerError, false);
             this.player.addEventListener('timeupdate', this._handlePlayerTimeupdate, false);
-            
         },
         
-        bindPreloadPlayerEvents: function() {
+        bindPreloadPlayerEvents: function()
+        {
+            this.unbindPlayerEvents();
             
             this.player.addEventListener('canplay', this._handlePlayerPreCanplay, false);
             this.player.addEventListener('progress', this._handlePlayerPreProgress, false);
             this.player.addEventListener('timeupdate', this._handlePlayerPreTimeupdate, false);
-            
-            try {
+        },
+        
+        unbindPlayerEvents: function()
+        {
+            try
+            {
                 this.player.removeEventListener('loadeddata',this._handlePlayerLoaded);
+                this.player.removeEventListener('loadedmetadata',this._handlePlayerLoadedMetadata);
                 this.player.removeEventListener('canplay',this._handlePlayerCanPlay);
                 this.player.removeEventListener('play',this._handlePlayerPlay);
                 this.player.removeEventListener('pause',this._handlePlayerPause);
                 this.player.removeEventListener('ended',this._handlePlayerEnded);
                 this.player.removeEventListener('error', this._handlePlayerError);
                 this.player.removeEventListener('timeupdate', this._handlePlayerTimeupdate);
-            } catch(e) {}
-            
+            }
+            catch(e) {}
         },
         
-        resetPlayer: function() {
-            this.resize();
-            this.resetPlayerCurrentTime();
-            this.player.setVolume(this.options.volume);
-            this.player.setMuted(this.options.muted);
+        unbindPreloadPlayerEvents: function()
+        {
+            try
+            {
+                this.player.removeEventListener('canplay', this._handlePlayerPreCanplay);
+                this.player.removeEventListener('progress', this._handlePlayerPreProgress);
+                this.player.removeEventListener('timeupdate', this._handlePlayerPreTimeupdate);
+            }
+            catch(e) {}
         },
 
-        resize: function(newWidth, newHeight) {
-
+        resize: function(newWidth, newHeight)
+        {    
             var videoWidth = this.options.width;
             var videoHeight = this.options.height;
             var videoRatio = videoWidth/videoHeight;
-            
-            if(typeof(newWidth) === 'undefined')
-            {
-                newWidth = this.$el.width();
-            }
-            
-            if(typeof(newHeight) === 'undefined')
-            {
-                newHeight = this.$el.height();
-            }
 
-            var viewWidth = newWidth;
-            var viewHeight = newHeight;
+            var viewWidth = newWidth || this.$el.width();
+            var viewHeight = newHeight || this.$el.height();
             var viewRatio = viewWidth/viewHeight;
 
             var width = 0,
                 height = 0,
                 top = 0,
                 left = 0;
-            if(this.options.keepVisible) {
-                if(videoRatio > viewRatio) {
+            if(this.options.keepVisible)
+            {
+                if(videoRatio > viewRatio)
+                {
                     width = viewWidth;
                     height = viewWidth / videoRatio;
-                    left = 0;
-                    top = -((height - viewHeight)/2);
-                } else {
-                    height = viewHeight;
-                    width = viewHeight * videoRatio;
-                    top = 0;
-                    left = -((width - viewWidth)/2);
                 }
-            } else {
-                if(videoRatio > viewRatio) {
+                else
+                {
                     height = viewHeight;
                     width = viewHeight * videoRatio;
-                    top = 0;
-                    left = -((width - viewWidth)/2);
-                } else {
+                }
+            }
+            else
+            {
+                if(videoRatio > viewRatio)
+                {
+                    height = viewHeight;
+                    width = viewHeight * videoRatio;
+                }
+                else
+                {
                     width = viewWidth;
                     height = viewWidth / videoRatio;
-                    left = 0;
-                    if(this.options.centerY === 'top') {
-                        top = 0;
-                    } else if(this.options.centerY === 'bottom') {
-                        top = -(height - viewHeight);
-                    } else {
-                        top = -((height - viewHeight)/2);
-                    }
                 }
             }
             
+            if(this.options.centerX === 'right')
+            {
+                left = -(width - viewWidth);
+            }
+            else if(this.options.centerX === 'center')
+            {
+                left = -((width - viewWidth)/2);
+            }
+            
+            if(this.options.centerY === 'bottom')
+            {
+                top = -(height - viewHeight);
+            }
+            else if(this.options.centerY === 'middle')
+            {
+                top = -((height - viewHeight)/2);
+            }
 
             this.width = Math.round(width);
             this.height = Math.round(height);
@@ -275,25 +319,14 @@ define([
             }
         },
 
-        remove: function() {
+        remove: function()
+        {
+            this._stopTimeUpdateInterval();
 
             if(this.player && this.player.remove) {
                 
-                try {
-                    if(!this.reallyLoaded) {
-                        this.player.removeEventListener('canplay', this._handlePlayerPreCanplay);
-                        this.player.removeEventListener('progress', this._handlePlayerPreProgress);
-                        this.player.removeEventListener('timeupdate', this._handlePlayerPreTimeupdate);
-                    } else {
-                        this.player.removeEventListener('loadeddata',this._handlePlayerLoaded);
-                        this.player.removeEventListener('canplay',this._handlePlayerCanPlay);
-                        this.player.removeEventListener('play',this._handlePlayerPlay);
-                        this.player.removeEventListener('pause',this._handlePlayerPause);
-                        this.player.removeEventListener('ended',this._handlePlayerEnded);
-                        this.player.removeEventListener('error', this._handlePlayerError);
-                        this.player.removeEventListener('timeupdate', this._handlePlayerTimeupdate);
-                    }
-                } catch(e){}
+                this.unbindPlayerEvents();
+                this.unbindPreloadPlayerEvents();
                 
                 try {
                     this.player.remove();
@@ -301,19 +334,18 @@ define([
                 
                 this.player = null;
             }
-            
-            this._stopTimeUpdateInterval();
 
             Backbone.View.prototype.remove.apply(this,arguments);
         },
 
-        play: function() {
-
-            if(!this.player) {
+        play: function()
+        {
+            if(!this.player)
+            {
                 return;
             }
             
-            if(!this.reallyLoaded)
+            if(this.options.preload && !this.preloaded)
             {
                 this.once('player:loaded',this._play);
             }
@@ -321,16 +353,10 @@ define([
             {
                 this._play();
             }
-            
-            
         },
         
-        _play: function() {
-            
-            if(!this.paused) {
-                this.rewind();
-            }
-            
+        _play: function()
+        {
             this.log('play', this.player.currentTime);
             
             this.paused = false;
@@ -338,8 +364,8 @@ define([
             this.player.play();
         },
 
-        pause: function() {
-            
+        pause: function()
+        {
             if(!this.player) {
                 return;
             }
@@ -351,8 +377,8 @@ define([
             this.player.pause();
         },
         
-        stop: function() {
-            
+        stop: function()
+        {
             if(!this.player) {
                 return;
             }
@@ -368,33 +394,26 @@ define([
         
         rewind: function()
         {
-            try {
-                if(this.options.start) {
-                    this.player.setCurrentTime(this.options.start);
-                } else {
-                    this.player.setCurrentTime(0);
-                }
+            try
+            {
+                this.setCurrentTime(this.options.start || 0);
+                
                 this.log('player.rewind',this.player.currentTime);
-            } catch(e){}    
-        },
-        
-        resetPlayerCurrentTime: function()
-        {
-            try {
-                this.player.setCurrentTime(this.currentTimeToPreload);
-                this.log('player.resetPlayerCurrentTime',this.player.currentTime);
-            } catch(e){}
-        },
-
-        getCurrentTime: function() {
-            if(!this.player) {
-                return 0;
             }
-            return this.player.currentTime;
+            catch(e){}    
         },
 
-        setCurrentTime: function(time) {
-            this.player.setCurrentTime(time);
+        getCurrentTime: function()
+        {
+            return this.player ? this.player.currentTime:0;
+        },
+
+        setCurrentTime: function(time)
+        {
+            if(this,player)
+            {
+                this.player.setCurrentTime(time);
+            }
         },
         
         setCurrentTimeAndPreload: function(time)
@@ -405,29 +424,48 @@ define([
                 return;
             }
             
-            this.currentTimeToPreload = time;
-            this.player.setVolume(0);
-            this.player.setMuted(true);
+            this.preloadTime = time;
             this.preload();
-            this.player.setCurrentTime(time);
-            this.player.play();
         },
         
         preload: function()
         {
-            this.firstPlay = false;
-            this.reallyLoaded = false;
-            this.preCanPlay = false;
-            this.preCanPlayThrough = false;
+            this.preloaded = false;
+            this.preloadFirstPlay = false;
+            this.preloadCanPlay = false;
+            this.preloadCanPlayThrough = false;
+            
+            this.player.pause();
+            this.player.setVolume(0);
+            this.player.setMuted(true);
             
             this.bindPreloadPlayerEvents();
+            
+            this.player.setCurrentTime(this.preloadTime);
+            this.player.play();
+        },
+        
+        resetPlayer: function()
+        {
+            this.player.setCurrentTime(this.preloadTime);
+            
+            this.player.setVolume(this.options.volume);
+            this.player.setMuted(this.options.muted);
+            
+            this.bindPlayerEvents();
         },
 
-        setVolume: function(volume) {
-            this.player.setVolume(volume);
+        setVolume: function(volume)
+        {
+            this.options.volume = volume;
+            
+            if(this.player) {
+                this.player.setVolume(volume);
+            }
         },
 
-        mute: function() {
+        mute: function()
+        {
             this.options.muted = true;
             
             if(this.player) {
@@ -435,7 +473,8 @@ define([
             }
         },
 
-        unmute: function() {
+        unmute: function()
+        {
             this.options.muted = false;
             
             if(this.player) {
@@ -443,45 +482,58 @@ define([
             }
         },
         
-        playProgress: function() {
-            
-            if(this.player) {
+        playProgress: function()
+        {
+            if(this.player)
+            {
+                var currentTime = this.getCurrentTime();
                 var duration = this.options.duration || this.player.duration;
-                return duration === 0 ? 0:(this.player.currentTime/duration);
+                return duration === 0 ? 0:(currentTime/duration);
             }
             
             return 0;
-            
-        },
-        
-        needsForcePlay: function()
-        {
-            var currentTime = this.player && this.player.currentTime ? this.player.currentTime:0;
-            return currentTime < this.currentTimeToPreload || (currentTime === 0 && this.currentTimeToPreload > 0);
         },
 
+        /**
+         * 
+         * Time update interval
+         *
+         */
         _startTimeUpdateInterval: function() {
 
-            if(this._timeUpdateInterval) {
+            if(this._timeUpdateInterval)
+            {
                 return;
             }
             
-            var callback = _.bind(this._handleTimeUpdateInterval,this);
-            this._timeUpdateInterval = setInterval(callback,this.options.timeUpdateInterval);
+            var interval = this.options.timeUpdateInterval;
+            this._timeUpdateInterval = setInterval(this._handleTimeUpdateInterval,interval);
 
         },
 
         _stopTimeUpdateInterval: function() {
 
-            if(this._timeUpdateInterval) {
+            if(this._timeUpdateInterval)
+            {
                 clearInterval(this._timeUpdateInterval);
                 this._timeUpdateInterval = null;
             }
 
         },
         
-        _handlePlayerReady: function() {
-            
+        forcePreloadPlay: function()
+        {
+            var currentTime = this.getCurrentTime();
+            if(!this.preloadFirstPlay && currentTime < this.preloadTime)
+            {
+                this.log('force preload play', currentTime);
+                this.player.play();
+                this.player.setCurrentTime(this.preloadTime);
+            }
+        },
+        
+        _handlePlayerReady: function()
+        {
             this.log('player.ready');
 
             this.ready = true;
@@ -489,110 +541,113 @@ define([
             this.resize();
             
             this.trigger('player:ready');
-
         },
         
         _handlePlayerPreCanplay: function()
         {
             this.log('pre.canplay');
-            this.preCanPlay = true;
-            var currentTime = this.player && this.player.currentTime ? this.player.currentTime:0;
-            if(!this.firstPlay && this.needsForcePlay()) {
-                this.log('pre.canplay','force play', currentTime);
-                this.player.play();
-                this.resetPlayerCurrentTime();
-            }
+            
+            this.preloadCanPlay = true;
+            
+            this.forcePreloadPlay();
         },
         
-        _handlePlayerPreCanplayThrough: function() {
-            
-            this.preCanPlayThrough = true;
+        _handlePlayerPreCanplayThrough: function()
+        {
             this.log('pre.canplaythrough');
+        
+            this.preloadCanPlayThrough = true;
             
+            this.forcePreloadPlay();
         },
         
-        _handlePlayerPreCanReallyPlay: function() {
-            if(this.canplayThroughTimeout) {
-                this.log('canplayThroughTimeout cleared');
-                window.clearTimeout(this.canplayThroughTimeout);
-                this.canplayThroughTimeout = null;
-            }
-            this._handlePlayerReallyLoaded();
-        },
-        
-        _handlePlayerPreProgress: function(e) {
+        _handlePlayerPreProgress: function(e)
+        {
             var player = e.target;
+            
             var duration = player && player.duration ? player.duration:0;
-            var currentTime = player && player.currentTime ? player.currentTime:0;
             var end = player && player.buffered && player.buffered.length ? player.buffered.end(0):0;
             var progress = duration && end ? (end/duration):0;
+            
             this.log('pre.progress',progress);
-            if(progress > 0 && !this.firstPlay && this.needsForcePlay()) {
-                this.log('pre.progress','force play', currentTime);
-                this.player.play();
-                this.resetPlayerCurrentTime();
+            
+            if(progress > 0) {
+                this.forcePreloadPlay();
             }
         },
         
-        _handlePlayerPreTimeupdate: function(e) {
+        _handlePlayerPreTimeupdate: function(e)
+        {    
+            var currentTime = this.getCurrentTime();
             
-            var currentTime = this.player.currentTime || 0;
-            
-            this.log('pre.timeupdate',currentTime, this.firstPlay, this.preCanPlay);
-            
-            if(!this.firstPlay)
+            if(!this.preloadFirstPlay)
             {
-                var delta = Math.abs(currentTime - this.currentTimeToPreload);
-                if(currentTime > this.currentTimeToPreload)
+                var delta = Math.abs(currentTime - this.preloadTime);
+                if(currentTime > this.preloadTime)
                 {
-                    this.log('pre.timeupdate', 'first');
-                    this.firstPlay = true;
+                    this.preloadFirstPlay = true;
                     this.player.pause();
                 }
                 else if(delta > 1)
                 {
-                    this.log('pre.timeupdate', 'seek', currentTime);
-                    this.resetPlayerCurrentTime();
+                    this.forcePreloadPlay();
                 }
             }
             
-            if(this.firstPlay && currentTime > this.currentTimeToPreload)
+            this.log('pre.timeupdate', currentTime, this.preloadFirstPlay, this.preloadCanPlay);
+            
+            if(this.preloadFirstPlay && currentTime >= this.preloadTime)
             {
-                this.log('pre.timeupdate', 'ready');
-                this._handlePlayerReallyLoaded();
+                this._handlePlayerPreloaded();
             }
         },
         
-        _handlePlayerReallyLoaded: function() {
-            
-            if(this.reallyLoaded) {
+        _handlePlayerPreloaded: function()
+        {    
+            if(this.preloaded)
+            {
                 return;
             }
             
-            this.reallyLoaded = true;
+            this.preloaded = true;
+            this.loaded = true;
             
             this.resetPlayer();
-            this.bindPlayerEvents();
             
-            this.log('player.reallyLoaded');
+            this.log('player.preloaded');
             
             window.setTimeout(_.bind(function() {
                 this.trigger('player:loaded');
             },this),1);
         },
         
-        _handlePlayerLoaded: function() {
+        _handlePlayerLoadedMetadata: function()
+        {
             
+            this.log('player.loadedmetadata');
+            
+            if(!this.loaded)
+            {
+                this.loaded = true;
+                
+                window.setTimeout(_.bind(function() {
+                    this.trigger('player:loaded');
+                },this),1);
+            }
+        },
+        
+        _handlePlayerLoaded: function()
+        {
             this.log('player.loaded');
         },
         
-        _handlePlayerCanPlay: function() {
-            
+        _handlePlayerCanPlay: function()
+        {
             this.log('player.canplay');
         },
 
-        _handlePlayerPlay: function() {
-            
+        _handlePlayerPlay: function()
+        {
             this.log('player.play');
 
             this.playing = true;
@@ -602,72 +657,68 @@ define([
             window.setTimeout(_.bind(function() {
                 this.trigger('player:play');
             },this),1);
-
         },
 
-        _handlePlayerPause: function() {
-            
+        _handlePlayerPause: function()
+        {
             this.log('player.pause');
 
             this.playing = false;
+            this.paused = true;
             this._stopTimeUpdateInterval();
 
             window.setTimeout(_.bind(function() {
                 this.trigger('player:pause');
             },this),1);
-
         },
 
-        _handlePlayerEnded: function() {
-
+        _handlePlayerEnded: function()
+        {
+            this.log('player.ended');
+            
             this.playing = false;
             this.paused = false;
             this._stopTimeUpdateInterval();
 
             window.setTimeout(_.bind(function() {
                 this.trigger('player:ended');
-
-                if(this.options.loop) {
+                if(this.options.loop)
+                {
                     this.player.play();
                 }
             },this),1);
-
         },
         
-        _handleTimeUpdateInterval: function() {
+        _handleTimeUpdateInterval: function()
+        {
+            this._handlePlayerTimeupdate();
+        },
 
-            if(!this.player) {
-                this._stopTimeUpdateInterval();
+        _handlePlayerTimeupdate: function()
+        {
+            if(!this.player)
+            {
                 return;
             }
 
-            try {
+            try
+            {
                 this.currentTime = this.player.currentTime;
-            }catch(e){}
+            }
+            catch(e){}
 
             this.trigger('player:timeupdate',this.currentTime);
             
-            if(this.options.end && this.currentTime >= this.options.end) {
+            if(this.options.end > 0 && this.currentTime >= this.options.end)
+            {
                 this.stop();
                 this._handlePlayerEnded();
             }
-
         },
 
-        _handlePlayerTimeupdate: function() {
-
-            try {
-                this.currentTime = this.player.currentTime;
-            }catch(e){}
-
-            this.trigger('player:timeupdate',this.currentTime);
-
-        },
-
-        _handlePlayerError: function() {
-
+        _handlePlayerError: function()
+        {
             this.log('error',arguments);
-
         },
         
         log: function()
@@ -690,7 +741,8 @@ define([
             bool = false;
 
         // IE9 Running on Windows Server SKU can cause an exception to be thrown, bug #224
-        try {
+        try
+        {
             bool = !!elem.canPlayType;
             if(bool && typeof(type) !== 'undefined')
             {
@@ -711,7 +763,8 @@ define([
                     bool = false;
                 }
             }
-        } catch(e) { }
+        }
+        catch(e) { }
 
         return bool;
     };
